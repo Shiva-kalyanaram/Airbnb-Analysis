@@ -1,145 +1,109 @@
 import pandas as pd
-from pymongo import MongoClient
 import streamlit as st
 import plotly.express as px
-from streamlit_option_menu import option_menu
-from PIL import Image
+import seaborn as sns
+import matplotlib.pyplot as plt
 
-# Setting up page configuration
-st.set_page_config(page_title= "Airbnb Data Visualization | By Shiva",
-                   layout= "wide",
-                   initial_sidebar_state= "expanded",
-                   menu_items={'About': """# This dashboard app is created by *Shiva*!
-                                        Data has been gathered from mongodb atlas"""}
-                  )
-# Creating option menu in the side bar
-with st.sidebar:
-    selected = option_menu("Menu", ["Home","Overview","Explore"],
-                           icons=["house","graph-up-arrow","bar-chart-line"],
-                           menu_icon= "menu-button-wide",
-                           default_index=0,
-                           styles={"nav-link": {"font-size": "20px", "text-align": "left", "margin": "-2px", "--hover-color": "#FF5A5F"},
-                                   "nav-link-selected": {"background-color": "#FF5A5F"}}
-                          )
-#mongodb client
-client = MongoClient("mongodb+srv://shivacva20:1234@cluster0.ncrxzez.mongodb.net/?retryWrites=true&w=majority")
-#data retrieval:
-db = client['sample_airbnb']
-col = db['listingsAndReviews']
+# Set page configuration
+st.set_page_config(page_title="Airbnb Data Visualization | By Shiva",
+                   layout="centered",
+                   initial_sidebar_state="auto",
+                   menu_items=None)
 
-# READING THE CLEANED DATAFRAME
+# Reading the cleaned DataFrame (replace this with your actual data)
 df = pd.read_csv('Airbnb_data.csv')
 
-# HOME PAGE
-if selected == "Home":
-    # # Title Image
-    # st.image("title.png")
-    col1, col2 = st.columns(2, gap='medium')
-    col1.markdown("## :blue[Domain] : Travel Industry, Property Management and Tourism")
-    col1.markdown("## :blue[Technologies used] : Python, Pandas, Plotly, Streamlit, MongoDB")
-    col1.markdown(
-        "## :blue[Overview] : To analyze Airbnb data using MongoDB Atlas, perform data cleaning and preparation, develop interactive visualizations, and create dynamic plots to gain insights into pricing variations, availability patterns, and location-based trends. ")
-    col2.markdown("#   ")
-    col2.markdown("#   ")
-    # col2.image("home.jpg")
+# Sidebar for user input
+st.title('Airbnb Data Analysis and visualization')
+st.sidebar.header("Explore Data")
+country = st.sidebar.selectbox("Select Country", sorted(df['Country'].unique()))
+room_type = st.sidebar.selectbox("Select Room Type", sorted(df['Room_type'].unique()))
 
-# OVERVIEW PAGE
-if selected == "Overview":
-    tab1, tab2 = st.tabs(["$\huge 📝 RAW DATA $", "$\huge🚀 INSIGHTS $"])
+# Price Analysis inputs
+property_type = st.sidebar.selectbox("Select Property Type", sorted(df['Property_type'].unique()))
+price_range = st.sidebar.slider('Select Price Range', df['Price'].min(), df['Price'].max(), (df['Price'].min(), df['Price'].max()))
 
-    # RAW DATA TAB
-    with tab1:
-        # RAW DATA
-        col1, col2 = st.columns(2)
-        if col1.button("Click to view Raw data"):
-            col1.write(col.find_one())
-        # DATAFRAME FORMAT
-        if col2.button("Click to view Dataframe"):
-            col1.write(col.find_one())
-            col2.write(df)
+# Main page selection
+page_selection = st.radio("Select Page", ["Table View", "Visual View", "Price Analysis"])
 
-    # INSIGHTS TAB
-    with tab2:
-        # GETTING USER INPUTS
-        country = st.sidebar.multiselect('Select a Country', sorted(df.Country.unique()),
-                                         sorted(df.Country.unique()))
-        prop = st.sidebar.multiselect('Select Property_type', sorted(df.Property_type.unique()),
-                                      sorted(df.Property_type.unique()))
-        room = st.sidebar.multiselect('Select Room_type', sorted(df.Room_type.unique()),
-                                      sorted(df.Room_type.unique()))
-        price = st.sidebar.slider('Select Price', df.Price.min(), df.Price.max(), (df.Price.min(), df.Price.max()))
+# Table View Page
+if page_selection == "Table View":
+    # Filter the data based on user input
+    filtered_df = df[(df['Country'] == country) & (df['Room_type'] == room_type)]
 
-        # CONVERTING THE USER INPUT INTO QUERY
-        query = f'Country in {country} & Room_type in {room} & Property_type in {prop} & Price >= {price[0]} & Price <= {price[1]}'
+    # Display the top 10 hosts with the highest number of listings
+    st.header("Top 10 Hosts with Highest Number of Listings")
+    top_hosts = filtered_df.groupby("Host_name").size().nlargest(10).reset_index(name="Listings")
+    st.table(top_hosts)
 
-        # CREATING COLUMNS
-        col1, col2 = st.columns(2, gap='medium')
+    # Display total listings in each room type
+    st.header("Total Listings in Each Room Type")
+    total_listings_by_room_type = filtered_df.groupby("Room_type").size().reset_index(name="Total_Listings")
+    st.table(total_listings_by_room_type)
 
-        with col1:
-            # TOP 10 PROPERTY TYPES BAR CHART
-            df1 = df.query(query).groupby(["Property_type"]).size().reset_index(name="Listings").sort_values(
-                by='Listings', ascending=False)[:10]
-            fig = px.bar(df1,
-                         title='Top 10 Property Types',
-                         x='Listings',
-                         y='Property_type',
-                         orientation='h',
-                         color='Property_type',
-                         color_continuous_scale=px.colors.sequential.Agsunset)
-            st.plotly_chart(fig, use_container_width=True)
-            # TOP 10 HOSTS BAR CHART
-            df2 = df.query(query).groupby(["Host_name"]).size().reset_index(name="Listings").sort_values(
-                by='Listings', ascending=False)[:10]
-            fig = px.bar(df2,
-                         title='Top 10 Hosts with Highest number of Listings',
-                         x='Listings',
-                         y='Host_name',
-                         orientation='h',
-                         color='Host_name',
-                         color_continuous_scale=px.colors.sequential.Agsunset)
-            fig.update_layout(showlegend=False)
-            st.plotly_chart(fig, use_container_width=True)
-            with col2:
-                # TOTAL LISTINGS IN EACH ROOM TYPES PIE CHART
-                df1 = df.query(query).groupby(["Room_type"]).size().reset_index(name="counts")
-                fig = px.pie(df1,
-                             title='Total Listings in each Room_types',
-                             names='Room_type',
-                             values='counts',
-                             color_discrete_sequence=px.colors.sequential.Rainbow
-                             )
-                fig.update_traces(textposition='outside', textinfo='value+label')
-                st.plotly_chart(fig, use_container_width=True)
+    # Display top 10 property types available
+    st.header("Top 10 Property Types Available")
+    top_property_types = df.groupby("Property_type").size().nlargest(10).reset_index(name="Listings")
+    st.table(top_property_types)
 
-                # TOTAL LISTINGS BY COUNTRY CHOROPLETH MAP
-                country_df = df.query(query).groupby(['Country'], as_index=False)['Name'].count().rename(
-                    columns={'Name': 'Total_Listings'})
-                fig = px.choropleth(country_df,
-                                    title='Total Listings in each Country',
-                                    locations='Country',
-                                    locationmode='country names',
-                                    color='Total_Listings',
-                                    color_continuous_scale=px.colors.sequential.Plasma
-                                    )
-                st.plotly_chart(fig, use_container_width=True)
+# Visual View Page
+elif page_selection == "Visual View":
+    st.title("Visual Representations")
 
-        # EXPLORE PAGE
-if selected == "Explore":
-    st.markdown("## Explore more about the Airbnb data")
+    # Query 1: Top 10 Property Types available
+    if st.checkbox("Show Top 10 Property Types available"):
+        st.header("Top 10 Property Types available")
+        fig1, ax1 = plt.subplots(figsize=(10, 8))
+        ax1 = sns.countplot(data=df, y=df.Property_type.values, order=df.Property_type.value_counts().index[:10])
+        ax1.set_title("Top 10 Property Types available")
+        st.pyplot(fig1)
 
-    # GETTING USER INPUTS
-    country = st.sidebar.multiselect('Select a Country', sorted(df.Country.unique()),
-                                     sorted(df.Country.unique()))
-    prop = st.sidebar.multiselect('Select Property_type', sorted(df.Property_type.unique()),
-                                  sorted(df.Property_type.unique()))
-    room = st.sidebar.multiselect('Select Room_type', sorted(df.Room_type.unique()),
-                                  sorted(df.Room_type.unique()))
-    price = st.slider('Select Price', df.Price.min(), df.Price.max(), (df.Price.min(), df.Price.max()))
+    # Query 2: Total Listings in each Room Type
+    if st.checkbox("Show Total Listings in each Room Type"):
+        st.header("Total Listings in each Room Type")
+        fig2, ax2 = plt.subplots(figsize=(10, 8))
+        ax2 = sns.countplot(data=df, x=df.Room_type)
+        ax2.set_title("Total Listings in each Room Type")
+        st.pyplot(fig2)
 
-    # CONVERTING THE USER INPUT INTO QUERY
-    query = f'Country in {country} & Room_type in {room} & Property_type in {prop} & Price >= {price[0]} & Price <= {price[1]}'
+    # Query 3: Top 10 Hosts with Highest number of Listings
+    if st.checkbox("Show Top 10 Hosts with Highest number of Listings"):
+        st.header("Top 10 Hosts with Highest number of Listings")
+        fig3, ax3 = plt.subplots(figsize=(10, 8))
+        ax3 = sns.countplot(data=df, y=df.Host_name, order=df.Host_name.value_counts().index[:10])
+        ax3.set_title("Top 10 Hosts with Highest number of Listings")
+        st.pyplot(fig3)
 
-    # HEADING 1
+    # Query 4: Choropleth Map
+    if st.checkbox("Show Choropleth Map"):
+        st.header("Choropleth Map")
+        fig4 = px.choropleth(data_frame=df, locations='Country_code', color='Country', locationmode='country names')
+        st.plotly_chart(fig4)
+
+    # Query 5: Scatter Plot - Avg Listing Price in each Country
+    if st.checkbox("Show Scatter Plot - Avg Listing Price in each Country"):
+        st.header("Scatter Plot - Avg Listing Price in each Country")
+        country_df = df.groupby('Country', as_index=False)['Price'].mean()
+        fig5 = px.scatter(data_frame=country_df, x='Country', y='Price', color='Country', size='Price',
+                          opacity=1, size_max=35, title='Avg Listing Price in each Countries')
+        st.plotly_chart(fig5)
+
+    # Query 6: Bar Plot - Avg Review Scores by Room Type
+    if st.checkbox("Show Bar Plot - Avg Review Scores by Room Type"):
+        st.header("Bar Plot - Avg Review Scores by Room Type")
+        rev_df = df.groupby('Room_type', as_index=False)['Review_scores'].mean().sort_values(by='Review_scores')
+        fig6 = px.bar(data_frame=rev_df, x='Room_type', y='Review_scores', color='Review_scores')
+        st.plotly_chart(fig6)
+
+    # Query 7: Bar Plot - Avg Price by Room Type
+    if st.checkbox("Show Bar Plot - Avg Price by Room Type"):
+        st.header("Bar Plot - Avg Price by Room Type")
+        pr_df = df.groupby('Room_type', as_index=False)['Price'].mean().sort_values(by='Price')
+        fig7 = px.bar(data_frame=pr_df, x='Room_type', y='Price', color='Price')
+        st.plotly_chart(fig7)
+
+# Price Analysis Page
+elif page_selection == "Price Analysis":
     st.markdown("## Price Analysis")
 
     # CREATING COLUMNS
@@ -147,7 +111,7 @@ if selected == "Explore":
 
     with col1:
         # AVG PRICE BY ROOM TYPE BARCHART
-        pr_df = df.query(query).groupby('Room_type', as_index=False)['Price'].mean().sort_values(by='Price')
+        pr_df = df.query(f'Country == "{country}" & Room_type == "{room_type}" & Property_type == "{property_type}" & Price >= {price_range[0]} & Price <= {price_range[1]}').groupby('Room_type', as_index=False)['Price'].mean().sort_values(by='Price')
         fig = px.bar(data_frame=pr_df,
                      x='Room_type',
                      y='Price',
@@ -160,7 +124,7 @@ if selected == "Explore":
         st.markdown("## Availability Analysis")
 
         # AVAILABILITY BY ROOM TYPE BOX PLOT
-        fig = px.box(data_frame=df.query(query),
+        fig = px.box(data_frame=df.query(f'Country == "{country}" & Room_type == "{room_type}" & Property_type == "{property_type}" & Price >= {price_range[0]} & Price <= {price_range[1]}'),
                      x='Room_type',
                      y='Availability_365',
                      color='Room_type',
@@ -170,7 +134,7 @@ if selected == "Explore":
 
     with col2:
         # AVG PRICE IN COUNTRIES SCATTERGEO
-        country_df = df.query(query).groupby('Country', as_index=False)['Price'].mean()
+        country_df = df.query(f'Country == "{country}" & Room_type == "{room_type}" & Property_type == "{property_type}" & Price >= {price_range[0]} & Price <= {price_range[1]}').groupby('Country', as_index=False)['Price'].mean()
         fig = px.scatter_geo(data_frame=country_df,
                              locations='Country',
                              color='Price',
@@ -187,7 +151,7 @@ if selected == "Explore":
         st.markdown("#   ")
 
         # AVG AVAILABILITY IN COUNTRIES SCATTERGEO
-        country_df = df.query(query).groupby('Country', as_index=False)['Availability_365'].mean()
+        country_df = df.query(f'Country == "{country}" & Room_type == "{room_type}" & Property_type == "{property_type}" & Price >= {price_range[0]} & Price <= {price_range[1]}').groupby('Country', as_index=False)['Availability_365'].mean()
         country_df.Availability_365 = country_df.Availability_365.astype(int)
         fig = px.scatter_geo(data_frame=country_df,
                              locations='Country',
